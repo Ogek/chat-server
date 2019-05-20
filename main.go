@@ -16,7 +16,7 @@ type Message struct {
 
 type User struct {
 	Id int
-	Output *websocket.Conn
+	Output *websocket.Conn `json:"-"`
 }
 
 type ChatServer struct {
