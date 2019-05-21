@@ -33,7 +33,7 @@ func (cs *ChatServer) Run(){
 				cs.Users[user.Id] = user
 				go func() {
 					cs.Input <- Message{
-						Text: fmt.Sprintf("%s joined", user.Id),
+						Text: fmt.Sprintf("%d joined", user.Id),
 						User: User {Id: 0},
 					}
 				}()
@@ -41,7 +41,7 @@ func (cs *ChatServer) Run(){
 				delete(cs.Users, user.Id)
 				go func() {
 					cs.Input <- Message{
-						Text: fmt.Sprintf("%s left", user.Id),
+						Text: fmt.Sprintf("%d left", user.Id),
 						User: User {Id: 0},
 					}
 				}()
@@ -71,6 +71,7 @@ func main() {
 			Id: rand.Int(),
 		}
 		chatServer.Join <- user
+
 		for {
 			msg := Message{
 				User: user,
