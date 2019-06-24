@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 
 	"golang.org/x/net/websocket"
 )
@@ -116,6 +117,11 @@ func main() {
 			}
 		}
 	}))
-	log.Println("Serving at http://localhost:8000...")
-	log.Fatal(http.ListenAndServe(":8000", nil))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+	log.Printf("Serving at http://localhost:%s...", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
