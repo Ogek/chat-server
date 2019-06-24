@@ -9,44 +9,62 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-type Message struct {
-	Text string `json:"text"`
-	User User   `json:"user"`
-}
-
+// User is Client of Hub
 type User struct {
-	Id     int
+	ID     int             `json:"id"`
+	Name   string          `json:"name"`
 	Output *websocket.Conn `json:"-"`
 }
 
-type ChatServer struct {
+// Hub is the core of the server that handles User connections
+type Hub struct {
 	Users map[int]User
 	Join  chan User
 	Leave chan User
 	Input chan Message
 }
 
-func (cs *ChatServer) Run() {
+// Message is WS Message connection
+type Message struct {
+	Type    string                 `json:"type"`
+	Payload map[string]interface{} `json:"payload"`
+}
+
+// Run is Hub's function than handles various cases of interaction with Users
+func (hub *Hub) Run() {
+	adminUser := User{ID: 0, Name: "ADMIN"}
+
 	for {
 		select {
-		case user := <-cs.Join:
-			cs.Users[user.Id] = user
+		case user := <-hub.Join:
+			hub.Users[user.ID] = user
 			go func() {
-				cs.Input <- Message{
-					Text: fmt.Sprintf("%d joined", user.Id),
-					User: User{Id: 0},
+				hub.Input <- Message{
+					Type: "admin_message",
+					Payload: map[string]interface{}{
+						"text": fmt.Sprintf("%s joined", user.Name),
+						"user": adminUser,
+					},
+				}
+
+				err := websocket.JSON.Send(user.Output, user)
+				if err != nil {
+					fmt.Println("Error sending open data", err.Error())
 				}
 			}()
-		case user := <-cs.Leave:
-			delete(cs.Users, user.Id)
+		case user := <-hub.Leave:
+			delete(hub.Users, user.ID)
 			go func() {
-				cs.Input <- Message{
-					Text: fmt.Sprintf("%d left", user.Id),
-					User: User{Id: 0},
+				hub.Input <- Message{
+					Type: "admin_message",
+					Payload: map[string]interface{}{
+						"text": fmt.Sprintf("%s left", user.Name),
+						"user": adminUser,
+					},
 				}
 			}()
-		case msg := <-cs.Input:
-			for _, user := range cs.Users {
+		case msg := <-hub.Input:
+			for _, user := range hub.Users {
 				err := websocket.JSON.Send(user.Output, msg)
 				if err != nil {
 					fmt.Println("Error broadcasting message: ", err.Error())
@@ -57,33 +75,46 @@ func (cs *ChatServer) Run() {
 }
 
 func main() {
-	chatServer := &ChatServer{
+	hub := &Hub{
 		Users: make(map[int]User),
 		Join:  make(chan User),
 		Leave: make(chan User),
 		Input: make(chan Message),
 	}
 
-	go chatServer.Run()
-	http.Handle("/", websocket.Handler(func(ws *websocket.Conn) {
-		user := User{
-			Output: ws,
-			Id:     rand.Int(),
+	go hub.Run()
+	http.Handle("/", websocket.Handler(func(conn *websocket.Conn) {
+		user := &User{
+			Output: conn,
+			Name:   "",
+			ID:     rand.Int(),
 		}
-		chatServer.Join <- user
 
 		for {
-			msg := Message{
-				User: user,
-			}
-			err := websocket.JSON.Receive(ws, &msg)
+			msg := Message{}
+			err := websocket.JSON.Receive(conn, &msg)
 			if err != nil {
-				chatServer.Leave <- user
+				fmt.Println("Error receiving message", err.Error())
+				hub.Leave <- *user
 				return
 			}
-			chatServer.Input <- msg
+			switch msg.Type {
+			case "login":
+				user.Name = msg.Payload["name"].(string)
+				hub.Join <- *user
+				break
+			case "message":
+				msg := Message{
+					Type: "message",
+					Payload: map[string]interface{}{
+						"user": *user,
+						"text": msg.Payload["text"].(string),
+					},
+				}
+				hub.Input <- msg
+				break
+			}
 		}
-
 	}))
 	log.Println("Serving at http://localhost:8000...")
 	log.Fatal(http.ListenAndServe(":8000", nil))
