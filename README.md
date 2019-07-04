@@ -16,8 +16,8 @@ Send message from user.
 - `text`: Body of message
 
 
-
-User left chat automatically on closed connection
+# english: sorry I had to, :D
+User leaves the chat automatically on closed connection 
 
 ## Examples
 
