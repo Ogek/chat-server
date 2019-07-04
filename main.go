@@ -17,18 +17,18 @@ type User struct {
 	Output *websocket.Conn `json:"-"`
 }
 
+// Message is WS Message connection
+type Message struct {
+	Type    string                 `json:"type"`
+	Payload map[string]interface{} `json:"payload"`
+}
+
 // Hub is the core of the server that handles User connections
 type Hub struct {
 	Users map[int]User
 	Join  chan User
 	Leave chan User
 	Input chan Message
-}
-
-// Message is WS Message connection
-type Message struct {
-	Type    string                 `json:"type"`
-	Payload map[string]interface{} `json:"payload"`
 }
 
 // Run runs the chat hub, handling websocket connections,
