@@ -31,6 +31,16 @@ type Hub struct {
 	Input chan Message
 }
 
+// NewHub creates a new Hub.
+func NewHub() *Hub {
+	return &Hub{
+		Users: make(map[int]User),
+		Join:  make(chan User),
+		Leave: make(chan User),
+		Input: make(chan Message),
+	}
+}
+
 // Run runs the chat hub, handling websocket connections,
 // as well as various cases of user interaction
 func (hub *Hub) Run() {
@@ -116,13 +126,7 @@ func (hub *Hub) handleWS(conn *websocket.Conn) {
 }
 
 func main() {
-	hub := &Hub{
-		Users: make(map[int]User),
-		Join:  make(chan User),
-		Leave: make(chan User),
-		Input: make(chan Message),
-	}
-
+	hub := NewHub()
 	hub.Run()
 
 	port := os.Getenv("PORT")
