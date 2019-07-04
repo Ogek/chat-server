@@ -31,52 +31,57 @@ type Message struct {
 	Payload map[string]interface{} `json:"payload"`
 }
 
-// Run is Hub's function than handles various cases of interaction with Users
+// Run runs the chat hub, handling websocket connections,
+// as well as various cases of user interaction
 func (hub *Hub) Run() {
-	adminUser := User{ID: 0, Name: "ADMIN"}
+	go func() {
+		adminUser := User{ID: 0, Name: "ADMIN"}
 
-	for {
-		select {
-		case user := <-hub.Join:
-			hub.Users[user.ID] = user
-			go func() {
-				hub.Input <- Message{
-					Type: "admin_message",
-					Payload: map[string]interface{}{
-						"text": fmt.Sprintf("%s joined", user.Name),
-						"user": adminUser,
-					},
-				}
+		for {
+			select {
+			case user := <-hub.Join:
+				hub.Users[user.ID] = user
+				go func() {
+					hub.Input <- Message{
+						Type: "admin_message",
+						Payload: map[string]interface{}{
+							"text": fmt.Sprintf("%s joined", user.Name),
+							"user": adminUser,
+						},
+					}
 
-				err := websocket.JSON.Send(user.Output, user)
-				if err != nil {
-					fmt.Println("Error sending open data", err.Error())
-				}
-			}()
-		case user := <-hub.Leave:
-			delete(hub.Users, user.ID)
-			go func() {
-				hub.Input <- Message{
-					Type: "admin_message",
-					Payload: map[string]interface{}{
-						"text": fmt.Sprintf("%s left", user.Name),
-						"user": adminUser,
-					},
-				}
-			}()
-		case msg := <-hub.Input:
-			for _, user := range hub.Users {
-				err := websocket.JSON.Send(user.Output, msg)
-				if err != nil {
-					fmt.Println("Error broadcasting message: ", err.Error())
+					err := websocket.JSON.Send(user.Output, user)
+					if err != nil {
+						fmt.Println("Error sending open data", err.Error())
+					}
+				}()
+			case user := <-hub.Leave:
+				delete(hub.Users, user.ID)
+				go func() {
+					hub.Input <- Message{
+						Type: "admin_message",
+						Payload: map[string]interface{}{
+							"text": fmt.Sprintf("%s left", user.Name),
+							"user": adminUser,
+						},
+					}
+				}()
+			case msg := <-hub.Input:
+				for _, user := range hub.Users {
+					err := websocket.JSON.Send(user.Output, msg)
+					if err != nil {
+						fmt.Println("Error broadcasting message: ", err.Error())
+					}
 				}
 			}
 		}
-	}
+	}()
+
+	http.Handle("/", websocket.Handler(hub.handleWS))
 }
 
-// HandleWS handles a wesocket connection to client
-func (hub *Hub) HandleWS(conn *websocket.Conn) {
+// handleWS handles a wesocket connection to client
+func (hub *Hub) handleWS(conn *websocket.Conn) {
 	user := &User{
 		Output: conn,
 		Name:   "",
@@ -118,8 +123,7 @@ func main() {
 		Input: make(chan Message),
 	}
 
-	go hub.Run()
-	http.Handle("/", websocket.Handler(hub.HandleWS))
+	hub.Run()
 
 	port := os.Getenv("PORT")
 	if port == "" {
