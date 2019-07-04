@@ -75,6 +75,41 @@ func (hub *Hub) Run() {
 	}
 }
 
+// HandleWS handles a wesocket connection to client
+func (hub *Hub) HandleWS(conn *websocket.Conn) {
+	user := &User{
+		Output: conn,
+		Name:   "",
+		ID:     rand.Int(),
+	}
+
+	for {
+		msg := Message{}
+		err := websocket.JSON.Receive(conn, &msg)
+		if err != nil {
+			fmt.Println("Error receiving message", err.Error())
+			hub.Leave <- *user
+			return
+		}
+		switch msg.Type {
+		case "login":
+			user.Name = msg.Payload["name"].(string)
+			hub.Join <- *user
+			break
+		case "message":
+			msg := Message{
+				Type: "message",
+				Payload: map[string]interface{}{
+					"user": *user,
+					"text": msg.Payload["text"].(string),
+				},
+			}
+			hub.Input <- msg
+			break
+		}
+	}
+}
+
 func main() {
 	hub := &Hub{
 		Users: make(map[int]User),
@@ -84,39 +119,7 @@ func main() {
 	}
 
 	go hub.Run()
-	http.Handle("/", websocket.Handler(func(conn *websocket.Conn) {
-		user := &User{
-			Output: conn,
-			Name:   "",
-			ID:     rand.Int(),
-		}
-
-		for {
-			msg := Message{}
-			err := websocket.JSON.Receive(conn, &msg)
-			if err != nil {
-				fmt.Println("Error receiving message", err.Error())
-				hub.Leave <- *user
-				return
-			}
-			switch msg.Type {
-			case "login":
-				user.Name = msg.Payload["name"].(string)
-				hub.Join <- *user
-				break
-			case "message":
-				msg := Message{
-					Type: "message",
-					Payload: map[string]interface{}{
-						"user": *user,
-						"text": msg.Payload["text"].(string),
-					},
-				}
-				hub.Input <- msg
-				break
-			}
-		}
-	}))
+	http.Handle("/", websocket.Handler(hub.HandleWS))
 
 	port := os.Getenv("PORT")
 	if port == "" {
